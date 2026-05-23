@@ -21,8 +21,9 @@ variable "require_code_owner_reviews" {
 }
 
 variable "required_status_check_contexts" {
-  type    = list(string)
-  default = []
+  type        = list(string)
+  default     = []
+  description = "Required status check contexts. Keep empty during initial bootstrap, then add exact check names after first run."
 }
 
 variable "production_wait_timer_minutes" {
@@ -31,6 +32,7 @@ variable "production_wait_timer_minutes" {
 }
 
 variable "require_production_environment_review" {
-  type    = bool
-  default = false
+  type        = bool
+  default     = false
+  description = "Set true if production deploy also requires manager review after the 3-hour wait."
 }
