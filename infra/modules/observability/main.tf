@@ -127,7 +127,7 @@ resource "google_monitoring_alert_policy" "cloud_run_instance_saturation" {
 }
 
 resource "google_monitoring_dashboard" "cloud_run" {
-  project        = var.project_id
+  project = var.project_id
   dashboard_json = jsonencode({
     displayName = "${var.service_name}-${var.environment}-cloud-run-dashboard"
     mosaicLayout = {

@@ -58,13 +58,13 @@ variable "p95_latency_ms_threshold" {
 }
 
 variable "enable_alerts" {
-  type    = bool
-  default = true
+  type        = bool
+  default     = true
   description = "Enable Cloud Monitoring alert policies"
 }
 
 variable "error_rate_threshold" {
-  type    = number
-  default = 1
+  type        = number
+  default     = 1
   description = "5xx error rate threshold (errors per second)"
 }
