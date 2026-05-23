@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Local .terraform directories
 .terraform/
 
@@ -42,3 +43,18 @@ terraform.rc
 # Optional: ignore plan files saved before destroying Terraform configuration
 # Uncomment the line below if you want to ignore planout files.
 # planout
+=======
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example
+.env
+__pycache__/
+.pytest_cache/
+.DS_Store
+manager-notification.json
+manager-reminders.json
+manager-approved.json
+>>>>>>> 85f5031 (Initial Commit)

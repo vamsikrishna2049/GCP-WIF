@@ -1,0 +1,177 @@
+name: Deploy Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: cloud-run-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+  SERVICE_NAME: ${{ vars.SERVICE_NAME || 'myapp' }}
+  ARTIFACT_REPOSITORY_ID: ${{ vars.ARTIFACT_REPOSITORY_ID || 'myapp' }}
+  TERRAFORM_INPUT: false
+  TERRAFORM_IN_AUTOMATION: true
+
+jobs:
+  validate:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform fmt
+        run: terraform -chdir=infra fmt -check -recursive
+
+      - name: Terraform init without backend
+        run: terraform -chdir=infra/environments/staging init -backend=false
+
+      - name: Terraform validate
+        run: terraform -chdir=infra/environments/staging validate
+
+  deploy-staging:
+    name: Deploy Staging
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: staging
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud with WIF
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: projects/${{ vars.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ vars.WIF_POOL_ID }}/providers/${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${ARTIFACT_REPOSITORY_ID}/${SERVICE_NAME}:${GITHUB_SHA}"
+          docker build \
+            --label org.opencontainers.image.revision="${GITHUB_SHA}" \
+            --label org.opencontainers.image.source="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            -t "${IMAGE}" \
+            ./app
+
+      - name: Push image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${ARTIFACT_REPOSITORY_ID}/${SERVICE_NAME}:${GITHUB_SHA}"
+          docker push "${IMAGE}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        run: |
+          terraform -chdir=infra/environments/staging init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=cloud-run/${SERVICE_NAME}"
+
+      - name: Terraform plan
+        run: |
+          cp infra/environments/staging/staging.tfvars.example infra/environments/staging/staging.auto.tfvars
+          terraform -chdir=infra/environments/staging plan \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="region=${REGION}" \
+            -var="service_name=${SERVICE_NAME}" \
+            -var="artifact_repository_id=${ARTIFACT_REPOSITORY_ID}" \
+            -var="runtime_service_account_email=${{ vars.RUNTIME_SERVICE_ACCOUNT }}" \
+            -var="notification_email=${{ secrets.MANAGER_EMAIL }}" \
+            -var="image_tag=${GITHUB_SHA}" \
+            -out=tfplan
+
+      - name: Terraform apply
+        run: terraform -chdir=infra/environments/staging apply -auto-approve tfplan
+
+  deploy-production:
+    name: Deploy Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+
+    # GitHub Environment production should have a 180-minute wait timer.
+    # Optional second production approval can also be configured through Terraform.
+    environment: production
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud with WIF
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: projects/${{ vars.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ vars.WIF_POOL_ID }}/providers/${{ vars.WIF_PROVIDER_ID }}
+          service_account: ${{ vars.DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${ARTIFACT_REPOSITORY_ID}/${SERVICE_NAME}:${GITHUB_SHA}"
+          docker build \
+            --label org.opencontainers.image.revision="${GITHUB_SHA}" \
+            --label org.opencontainers.image.source="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            -t "${IMAGE}" \
+            ./app
+
+      - name: Push image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${ARTIFACT_REPOSITORY_ID}/${SERVICE_NAME}:${GITHUB_SHA}"
+          docker push "${IMAGE}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        run: |
+          terraform -chdir=infra/environments/production init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=cloud-run/${SERVICE_NAME}"
+
+      - name: Terraform plan
+        run: |
+          cp infra/environments/production/production.tfvars.example infra/environments/production/production.auto.tfvars
+          terraform -chdir=infra/environments/production plan \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="region=${REGION}" \
+            -var="service_name=${SERVICE_NAME}" \
+            -var="artifact_repository_id=${ARTIFACT_REPOSITORY_ID}" \
+            -var="runtime_service_account_email=${{ vars.RUNTIME_SERVICE_ACCOUNT }}" \
+            -var="notification_email=${{ secrets.MANAGER_EMAIL }}" \
+            -var="image_tag=${GITHUB_SHA}" \
+            -out=tfplan
+
+      - name: Terraform apply
+        run: terraform -chdir=infra/environments/production apply -auto-approve tfplan

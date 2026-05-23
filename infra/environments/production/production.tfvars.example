@@ -1,0 +1,14 @@
+project_id                    = "myapp-production"
+environment                   = "production"
+region                        = "us-central1"
+service_name                  = "myapp"
+artifact_repository_id         = "myapp"
+runtime_service_account_email = "cr-myapp@myapp-production.iam.gserviceaccount.com"
+notification_email            = "manager@example.com"
+
+allow_unauthenticated = false
+min_instances         = 1
+max_instances         = 50
+cpu                   = "1"
+memory                = "1Gi"
+p95_latency_ms_threshold = 750

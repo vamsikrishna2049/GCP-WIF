@@ -1,0 +1,119 @@
+name: Request Manager Review
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - master
+      - "release/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  create-or-update-pr:
+    name: Create PR and notify manager
+    runs-on: ubuntu-latest
+
+    env:
+      MANAGER_GITHUB_USERNAME: ${{ vars.MANAGER_GITHUB_USERNAME }}
+      MANAGER_EMAIL: ${{ secrets.MANAGER_EMAIL }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SMTP_FROM: ${{ secrets.SMTP_FROM }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create or update PR and request manager review
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const manager = process.env.MANAGER_GITHUB_USERNAME;
+            if (!manager) {
+              core.setFailed("Repository variable MANAGER_GITHUB_USERNAME is required.");
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = context.ref.replace("refs/heads/", "");
+            const head = `${owner}:${branch}`;
+            const base = "main";
+
+            const existing = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: "open",
+              head,
+              base
+            });
+
+            let pr;
+            if (existing.data.length > 0) {
+              pr = existing.data[0];
+              core.info(`Existing PR found: #${pr.number}`);
+            } else {
+              const created = await github.rest.pulls.create({
+                owner,
+                repo,
+                title: `Merge ${branch} into ${base}`,
+                head: branch,
+                base,
+                body: [
+                  "## Manager Approval Required",
+                  "",
+                  "This PR was automatically created after a branch push.",
+                  "",
+                  "- Manager approval SLA: 2 hours",
+                  "- Reminder cadence: every 15 minutes",
+                  "- Merge target: protected `main` branch",
+                  "- Deployment: staging after merge, production after 3-hour environment wait timer",
+                ].join("\n")
+              });
+              pr = created.data;
+              core.info(`Created PR: #${pr.number}`);
+            }
+
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: pr.number,
+              labels: ["manager-approval-required", "auto-promotion-candidate"]
+            });
+
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner,
+                repo,
+                pull_number: pr.number,
+                reviewers: [manager]
+              });
+            } catch (error) {
+              core.warning(`Unable to request reviewer ${manager}: ${error.message}`);
+            }
+
+            const payload = {
+              repository: `${owner}/${repo}`,
+              branch,
+              pr_number: pr.number,
+              pr_url: pr.html_url,
+              title: pr.title,
+              author: pr.user.login,
+              sha: context.sha
+            };
+
+            const fs = require("fs");
+            fs.writeFileSync("manager-notification.json", JSON.stringify(payload, null, 2));
+
+            core.setOutput("pr_number", pr.number);
+            core.setOutput("pr_url", pr.html_url);
+
+      - name: Email manager
+        run: python3 scripts/notify_manager.py --template initial-push --payload-file manager-notification.json
