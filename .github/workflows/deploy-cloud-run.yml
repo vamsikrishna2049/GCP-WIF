@@ -96,6 +96,10 @@ jobs:
           cp infra/environments/staging/staging.tfvars.example infra/environments/staging/staging.auto.tfvars
           terraform -chdir=infra/environments/staging plan \
             -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="min_instances=${{ vars.MIN_INSTANCES }}" \
+-var="max_instances=${{ vars.MAX_INSTANCES }}" \
+-var="cpu=${{ vars.CPU }}" \
+-var="memory=${{ vars.MEMORY }}" \
             -var="region=${REGION}" \
             -var="service_name=${SERVICE_NAME}" \
             -var="artifact_repository_id=${ARTIFACT_REPOSITORY_ID}" \
@@ -165,6 +169,10 @@ jobs:
           cp infra/environments/production/production.tfvars.example infra/environments/production/production.auto.tfvars
           terraform -chdir=infra/environments/production plan \
             -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="min_instances=${{ vars.MIN_INSTANCES }}" \
+-var="max_instances=${{ vars.MAX_INSTANCES }}" \
+-var="cpu=${{ vars.CPU }}" \
+-var="memory=${{ vars.MEMORY }}" \
             -var="region=${REGION}" \
             -var="service_name=${SERVICE_NAME}" \
             -var="artifact_repository_id=${ARTIFACT_REPOSITORY_ID}" \
