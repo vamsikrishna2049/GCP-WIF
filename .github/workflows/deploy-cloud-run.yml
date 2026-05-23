@@ -59,18 +59,23 @@ jobs:
         uses: google-github-actions/auth@v3
         with:
           project_id: ${{ vars.GCP_PROJECT_ID }}
-          workload_identity_provider: projects/${{ vars.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ vars.WIF_POOL_ID }}/providers/${{ vars.WIF_PROVIDER_ID }}
+          workload_identity_provider: >-
+            projects/${{ vars.GCP_PROJECT_NUMBER }}/locations/global/
+            workloadIdentityPools/${{ vars.WIF_POOL_ID }}/providers/
+            ${{ vars.WIF_PROVIDER_ID }}
           service_account: ${{ vars.DEPLOYER_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v3
 
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
       - name: Build image
         run: |
           IMAGE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${ARTIFACT_REPOSITORY_ID}/${SERVICE_NAME}:${GITHUB_SHA}"
+
           docker build \
             --label org.opencontainers.image.revision="${GITHUB_SHA}" \
             --label org.opencontainers.image.source="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
@@ -80,6 +85,7 @@ jobs:
       - name: Push image
         run: |
           IMAGE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${ARTIFACT_REPOSITORY_ID}/${SERVICE_NAME}:${GITHUB_SHA}"
+
           docker push "${IMAGE}"
 
       - name: Setup Terraform
@@ -93,13 +99,16 @@ jobs:
 
       - name: Terraform plan
         run: |
-          cp infra/environments/staging/staging.tfvars.example infra/environments/staging/staging.auto.tfvars
+          cp \
+            infra/environments/staging/staging.tfvars.example \
+            infra/environments/staging/staging.auto.tfvars
+
           terraform -chdir=infra/environments/staging plan \
             -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
             -var="min_instances=${{ vars.MIN_INSTANCES }}" \
--var="max_instances=${{ vars.MAX_INSTANCES }}" \
--var="cpu=${{ vars.CPU }}" \
--var="memory=${{ vars.MEMORY }}" \
+            -var="max_instances=${{ vars.MAX_INSTANCES }}" \
+            -var="cpu=${{ vars.CPU }}" \
+            -var="memory=${{ vars.MEMORY }}" \
             -var="region=${REGION}" \
             -var="service_name=${SERVICE_NAME}" \
             -var="artifact_repository_id=${ARTIFACT_REPOSITORY_ID}" \
@@ -109,7 +118,9 @@ jobs:
             -out=tfplan
 
       - name: Terraform apply
-        run: terraform -chdir=infra/environments/staging apply -auto-approve tfplan
+        run: |
+          terraform -chdir=infra/environments/staging apply \
+            -auto-approve tfplan
 
   deploy-production:
     name: Deploy Production
@@ -132,18 +143,23 @@ jobs:
         uses: google-github-actions/auth@v3
         with:
           project_id: ${{ vars.GCP_PROJECT_ID }}
-          workload_identity_provider: projects/${{ vars.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ vars.WIF_POOL_ID }}/providers/${{ vars.WIF_PROVIDER_ID }}
+          workload_identity_provider: >-
+            projects/${{ vars.GCP_PROJECT_NUMBER }}/locations/global/
+            workloadIdentityPools/${{ vars.WIF_POOL_ID }}/providers/
+            ${{ vars.WIF_PROVIDER_ID }}
           service_account: ${{ vars.DEPLOYER_SERVICE_ACCOUNT }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v3
 
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
       - name: Build image
         run: |
           IMAGE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${ARTIFACT_REPOSITORY_ID}/${SERVICE_NAME}:${GITHUB_SHA}"
+
           docker build \
             --label org.opencontainers.image.revision="${GITHUB_SHA}" \
             --label org.opencontainers.image.source="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
@@ -153,6 +169,7 @@ jobs:
       - name: Push image
         run: |
           IMAGE="${REGION}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${ARTIFACT_REPOSITORY_ID}/${SERVICE_NAME}:${GITHUB_SHA}"
+
           docker push "${IMAGE}"
 
       - name: Setup Terraform
@@ -166,13 +183,16 @@ jobs:
 
       - name: Terraform plan
         run: |
-          cp infra/environments/production/production.tfvars.example infra/environments/production/production.auto.tfvars
+          cp \
+            infra/environments/production/production.tfvars.example \
+            infra/environments/production/production.auto.tfvars
+
           terraform -chdir=infra/environments/production plan \
             -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
             -var="min_instances=${{ vars.MIN_INSTANCES }}" \
--var="max_instances=${{ vars.MAX_INSTANCES }}" \
--var="cpu=${{ vars.CPU }}" \
--var="memory=${{ vars.MEMORY }}" \
+            -var="max_instances=${{ vars.MAX_INSTANCES }}" \
+            -var="cpu=${{ vars.CPU }}" \
+            -var="memory=${{ vars.MEMORY }}" \
             -var="region=${REGION}" \
             -var="service_name=${SERVICE_NAME}" \
             -var="artifact_repository_id=${ARTIFACT_REPOSITORY_ID}" \
@@ -182,4 +202,6 @@ jobs:
             -out=tfplan
 
       - name: Terraform apply
-        run: terraform -chdir=infra/environments/production apply -auto-approve tfplan
+        run: |
+          terraform -chdir=infra/environments/production apply \
+            -auto-approve tfplan
