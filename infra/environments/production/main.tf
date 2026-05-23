@@ -37,4 +37,6 @@ module "observability" {
   notification_email        = var.notification_email
   max_instances             = var.max_instances
   p95_latency_ms_threshold  = var.p95_latency_ms_threshold
+  enable_alerts             = var.enable_alerts
+  error_rate_threshold      = var.error_rate_threshold
 }
